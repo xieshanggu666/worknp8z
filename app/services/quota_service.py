@@ -67,6 +67,7 @@ def _add_ledger_tx(
     idempotency_key: str | None = None,
     reserved_after: float | None = None,
     trade_order_id: int | None = None,
+    auction_trade_id: int | None = None,
     price: float | None = None,
 ) -> AllowanceTransaction:
     tx = AllowanceTransaction(
@@ -81,6 +82,7 @@ def _add_ledger_tx(
         frozen_after=round(frozen_after, 4),
         reserved_after=round(reserved_after if reserved_after is not None else account.reserved_balance, 4),
         trade_order_id=trade_order_id,
+        auction_trade_id=auction_trade_id,
         remark=remark,
         idempotency_key=idempotency_key,
     )
@@ -448,6 +450,7 @@ def _apply_clearance(
     *,
     idempotency_key: str | None = None,
     trade_order: "TradeOrder | None" = None,
+    auction_trade: "AuctionTrade | None" = None,
     create_if_absent: bool = False,
 ) -> ComplianceRecord | None:
     """清缴核销内核：在调用方已开启的写事务内执行（不自行提交/回滚/加锁）。
@@ -460,8 +463,11 @@ def _apply_clearance(
     ``trade_deficit_clear`` 并关联订单，交割日期作为清缴日期，形成
     “买入到账 → 缺口补缴 → 达标”的年度配额闭环。
 
+    ``auction_trade`` 非空表示由集中竞价结算联动触发：补扣流水记为
+    ``auction_deficit_clear`` 并关联竞价成交单，同属年度配额闭环。
+
     ``create_if_absent`` 为真时（手动清缴兼容历史流程），若尚无活跃履约记录，
-    按年度核算排放量新建一条；交割联动仅在既有记录上核销，不隐式建记录。
+    按年度核算排放量新建一条；联动核销仅在既有记录上执行，不隐式建记录。
 
     调用方必须持有 ``clear:<company>:<year>`` 与对应账户键，并已进入写事务。
     """
@@ -540,12 +546,25 @@ def _apply_clearance(
                     f"{current_use} 吨"
                 )
                 trade_order_id = trade_order.id
+                auction_trade_id = None
                 price = float(trade_order.price)
+            elif auction_trade is not None:
+                seller_name = db.get(Company, auction_trade.seller_id)
+                counterparty = seller_name.name if seller_name else f"企业{auction_trade.seller_id}"
+                tx_type = "auction_deficit_clear"
+                remark = (
+                    f"集中竞价 {auction_trade.trade_no} 结算到账配额自动补缴{year}年度缺口 "
+                    f"{current_use} 吨"
+                )
+                trade_order_id = None
+                auction_trade_id = auction_trade.id
+                price = float(auction_trade.price)
             else:
                 counterparty = "履约清缴"
                 tx_type = "clear"
                 remark = f"{year}年度可用配额履约清缴 {current_use} 吨"
                 trade_order_id = None
+                auction_trade_id = None
                 price = None
             _add_ledger_tx(
                 db,
@@ -557,9 +576,10 @@ def _apply_clearance(
                 counterparty,
                 remark,
                 tx_date=deadline,
-                idempotency_key=None if trade_order is not None else idempotency_key,
+                idempotency_key=None if (trade_order is not None or auction_trade is not None) else idempotency_key,
                 reserved_after=reserved_after,
                 trade_order_id=trade_order_id,
+                auction_trade_id=auction_trade_id,
                 price=price,
             )
 
@@ -683,6 +703,39 @@ def settle_buyer_deficit_on_delivery(
         order.year,
         tx_date,
         trade_order=order,
+    )
+    db.refresh(record)
+    return record
+
+
+def settle_buyer_deficit_on_auction(
+    db: Session,
+    trade: "AuctionTrade",
+    tx_date: str,
+    auto_clear: bool = True,
+) -> ComplianceRecord | None:
+    """集中竞价结算联动清缴：用买方到账配额核销其同年度履约缺口（年度配额闭环）。
+
+    必须在结算事务内、买方全部成交单入账完成之后调用：调用方已持有
+    ``clear:<buyer>:<year>`` 与买方账户键（结算锁集合天然包含），
+    因此这里不再重复加锁、也不自行开启事务，核销与结算同生共死。
+
+    - 买方无活跃履约记录（尚无报告/清缴）：空操作，返回 None；
+    - 场次关闭 ``auto_clear_deficit`` 时不联动，企业可另行手动清缴。
+    """
+    if not auto_clear:
+        return None
+
+    record = _get_active_record(db, trade.buyer_id, trade.year)
+    if record is None or record.status == "reversed":
+        return None
+
+    record = _apply_clearance(
+        db,
+        trade.buyer_id,
+        trade.year,
+        tx_date,
+        auction_trade=trade,
     )
     db.refresh(record)
     return record

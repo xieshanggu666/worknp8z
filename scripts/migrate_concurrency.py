@@ -2,11 +2,14 @@
 
 用法：python scripts/migrate_concurrency.py（可重复执行）
 
-- allowance_transactions：idempotency_key、frozen_after、reserved_after、trade_order_id
-- allowance_accounts：reserved_balance（企业间订单交易占用）
+- allowance_transactions：idempotency_key、frozen_after、reserved_after、trade_order_id、
+  auction_trade_id（集中竞价成交关联）
+- allowance_accounts：reserved_balance（企业间订单/竞价交易占用）
 - compliance_records：idempotency_key、frozen_amount、report_id、is_active
 - trade_orders：企业间交易订单新表（建表由 SQLAlchemy 元数据完成，存在则跳过）；
   auto_clear_deficit 列控制交割时是否自动核销买方同年度履约缺口
+- auction_sessions / auction_bids / auction_trades / auction_audit_logs：
+  碳配额集中竞价市场四张新表（建表由 SQLAlchemy 元数据完成，存在则跳过）
 - mrv_reports：reversed_by/reversed_at/reversal_reason
 - 活跃履约记录保持 (company_id, year) 唯一；冲正归档记录可重新批准
 """
@@ -19,9 +22,15 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from sqlalchemy import inspect, text  # noqa: E402
 
 from app.core.database import engine  # noqa: E402
-# 触发模型注册，使 trade_orders 进入 metadata.create_all
+# 触发模型注册，使 trade_orders / auction_* 进入 metadata.create_all
 from app.core.database import Base  # noqa: E402
-from app.models import TradeOrder  # noqa: F401,E402
+from app.models import (  # noqa: F401,E402
+    AuctionAuditLog,
+    AuctionBid,
+    AuctionSession,
+    AuctionTrade,
+    TradeOrder,
+)
 
 
 def _has_column(inspector, table: str, column: str) -> bool:
@@ -91,6 +100,13 @@ def main():
             "allowance_transactions",
             "trade_order_id",
             "trade_order_id INTEGER",
+        )
+        _add_column(
+            statements,
+            inspector,
+            "allowance_transactions",
+            "auction_trade_id",
+            "auction_trade_id INTEGER",
         )
         if not _has_index(inspector, "uq_tx_account_idem"):
             # SQLite 中 NULL 不参与唯一索引，未携带幂等键的历史/新请求不受影响

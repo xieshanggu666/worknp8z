@@ -64,7 +64,9 @@ class AllowanceTransaction(Base):
     account_id = Column(Integer, ForeignKey("allowance_accounts.id"), nullable=False, index=True)
     company_id = Column(Integer, ForeignKey("companies.id"), nullable=False, index=True)
     # allocation/buy/sell/transfer_in/transfer_out/freeze/clear/frozen_clear/offset/reversal/
-    # trade_reserve/trade_release/trade_deliver_out/trade_deliver_in
+    # trade_reserve/trade_release/trade_deliver_out/trade_deliver_in/
+    # auction_bid_reserve/auction_bid_release/auction_reserve_release/
+    # auction_deliver_out/auction_deliver_in/auction_deficit_clear
     tx_type = Column(String(24), nullable=False)
     amount = Column(Numeric(18, 4), nullable=False, default=0)
     counterparty = Column(String(128), nullable=False, default="")
@@ -74,6 +76,7 @@ class AllowanceTransaction(Base):
     frozen_after = Column(Numeric(18, 4), nullable=False, default=0)
     reserved_after = Column(Numeric(18, 4), nullable=False, default=0)  # 交易占用快照
     trade_order_id = Column(Integer, ForeignKey("trade_orders.id"), nullable=True, index=True)  # 关联企业间订单
+    auction_trade_id = Column(Integer, ForeignKey("auction_trades.id"), nullable=True, index=True)  # 关联竞价成交单
     remark = Column(String(256), nullable=False, default="")
     idempotency_key = Column(String(64), nullable=True)  # 客户端去重键（UUID），同账户唯一
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow)

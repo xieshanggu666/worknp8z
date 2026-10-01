@@ -21,6 +21,12 @@ from app.models import (  # noqa: E402
     Quota,
     User,
 )
+from app.services.auction_service import (  # noqa: E402
+    Operator as AuctionOperator,
+    create_session,
+    open_session,
+    place_bid,
+)
 from app.services.calculation_service import recalc_company_year  # noqa: E402
 from app.services.mrv_service import (  # noqa: E402
     approve_report,
@@ -132,9 +138,38 @@ def main():
     clear_emission(db, companies[0].id, year, f"{year}-12-31")
     clear_emission(db, companies[1].id, year, f"{year}-12-31")
 
+    # ---- 2026 年度：新一年度配额 + 碳配额集中竞价市场演示 ----
+    next_year = year + 1
+    allocate_quota(db, companies[0].id, next_year, baseline=1200000, allocation_amount=1200000)
+    allocate_quota(db, companies[1].id, next_year, baseline=560000, allocation_amount=620000)
+
+    auction_op = AuctionOperator(id=users[0].id, username="admin", role="admin")
+    # 开放中的 2026 首场集中竞价（保留价 70 元/吨），供企业登录后直接报价
+    open_auction = create_session(
+        db,
+        year=next_year,
+        name=f"{next_year}年度首期碳配额集中竞价",
+        reserve_price=70,
+        estimated_volume=200000,
+        operator=auction_op,
+    )
+    open_session(db, open_auction.id, auction_op)
+    # 一张草稿场次，演示监管建场流程
+    create_session(
+        db,
+        year=next_year,
+        name=f"{next_year}年度第二期碳配额集中竞价（筹备中）",
+        reserve_price=72,
+        operator=auction_op,
+    )
+
     db.commit()
     db.close()
-    print("初始化完成：2 家企业、4 个核算边界、3 个排放因子、4 条活动数据（2025）、2 份配额、2 份已批准 MRV 报告、2 条履约记录（含 1 次缺口补缴）")
+    print(
+        "初始化完成：2 家企业、4 个核算边界、3 个排放因子、4 条活动数据（2025）、2 份配额、"
+        "2 份已批准 MRV 报告、2 条履约记录（含 1 次缺口补缴）、2026 年度配额、"
+        "1 个开放竞价场次 + 1 个草稿场次"
+    )
     print("账号：admin / verifier / elec / cement，密码均为 123456")
 
 

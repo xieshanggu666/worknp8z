@@ -53,6 +53,15 @@ def trade_order_key(order_id: int) -> str:
     return f"order:{order_id}"
 
 
+def auction_session_key(session_id: int) -> str:
+    """竞价场次键：报价/撤单/撮合/结算/撤场的进程内串行化。
+
+    锁序上位于 ``account:`` 与 ``clear:`` 之间（account < auction < clear < order），
+    撮合/结算同时获取场次键、全部参与账户键与清缴键，按名排序不会形成锁环。
+    """
+    return f"auction:{session_id}"
+
+
 def _get_lock(key: str) -> threading.RLock:
     with _locks_guard:
         lock = _locks.get(key)

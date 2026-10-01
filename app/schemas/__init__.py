@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from pydantic import BaseModel, Field
 
 
@@ -82,3 +84,34 @@ class TradeOrderCancelIn(BaseModel):
 
 class ReportReversalIn(BaseModel):
     reason: str = Field(min_length=2, max_length=500)
+
+
+class AuctionSessionIn(BaseModel):
+    year: int
+    name: str = Field(default="", max_length=128)
+    reserve_price: float = Field(default=0, ge=0)
+    estimated_volume: float | None = Field(default=None, ge=0)
+    product: str = Field(default="allowance", pattern="^(allowance|CCER)$")
+    auto_clear_deficit: bool = True
+    remark: str = Field(default="", max_length=256)
+    # 传入即“创建并直接开放”；缺省为草稿，监管随后调用开放接口
+    open_at: datetime | None = None
+    close_at: datetime | None = None
+    idempotency_key: str | None = None
+
+
+class AuctionSessionCancelIn(BaseModel):
+    reason: str = Field(default="", max_length=256)
+
+
+class AuctionBidIn(BaseModel):
+    quantity: float = Field(gt=0)
+    price: float = Field(ge=0)
+    side: str = Field(default="buy", pattern="^(buy|sell)$")
+    tx_date: str = ""
+    remark: str = Field(default="", max_length=256)
+    idempotency_key: str | None = None
+
+
+class AuctionBidCancelIn(BaseModel):
+    reason: str = Field(default="", max_length=256)
