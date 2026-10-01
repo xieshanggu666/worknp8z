@@ -5,6 +5,12 @@ from app.models.allowance import (
     Quota,
     TradeOrder,
 )
+from app.models.auction import (
+    AuctionBid,
+    AuctionSession,
+    AuctionTrade,
+    AuditLog,
+)
 from app.models.company import Company, EmissionScope
 from app.models.emission import (
     ActivityData,
@@ -30,5 +36,9 @@ __all__ = [
     "AllowanceTransaction",
     "ComplianceRecord",
     "TradeOrder",
+    "AuctionSession",
+    "AuctionBid",
+    "AuctionTrade",
+    "AuditLog",
     "MrvReport",
 ]

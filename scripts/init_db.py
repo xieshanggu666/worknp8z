@@ -28,6 +28,7 @@ from app.services.mrv_service import (  # noqa: E402
     submit_report,
 )
 from app.services.quota_service import allocate_quota, clear_emission  # noqa: E402
+from app.services import auction_service  # noqa: E402
 from app.services.trading_service import transfer as transfer_allowance  # noqa: E402
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -57,8 +58,9 @@ def main():
     db.flush()
 
     q1_hash, q1_salt = hash_password("123456")
-    db.add(User(username="elec", display_name="绿能电力", role="enterprise", company_id=companies[0].id, password_hash=q1_hash, salt=q1_salt))
-    db.add(User(username="cement", display_name="恒固水泥", role="enterprise", company_id=companies[1].id, password_hash=q1_hash, salt=q1_salt))
+    elec_user = User(username="elec", display_name="绿能电力", role="enterprise", company_id=companies[0].id, password_hash=q1_hash, salt=q1_salt)
+    cement_user = User(username="cement", display_name="恒固水泥", role="enterprise", company_id=companies[1].id, password_hash=q1_hash, salt=q1_salt)
+    db.add_all([elec_user, cement_user])
     db.flush()
 
     scopes = [
@@ -132,9 +134,30 @@ def main():
     clear_emission(db, companies[0].id, year, f"{year}-12-31")
     clear_emission(db, companies[1].id, year, f"{year}-12-31")
 
+    # 集中竞价市场演示：2026 年度首场（已结算）+ 第二场（申报中，可登录操作）
+    auction_year = 2026
+    allocate_quota(db, companies[0].id, auction_year, baseline=1200000, allocation_amount=1200000)
+    allocate_quota(db, companies[1].id, auction_year, baseline=600000, allocation_amount=600000)
+
+    s1 = auction_service.create_session(
+        db, auction_year, name="2026 年度首场集中竞价", price_floor=50, price_ceiling=120,
+        created_by=users[0].id,
+    )
+    auction_service.place_bid(db, s1.id, companies[0].id, "sell", 78, 200000, created_by=elec_user.id)
+    auction_service.place_bid(db, s1.id, companies[1].id, "buy", 82, 120000, created_by=cement_user.id)
+    auction_service.match_session(db, s1.id)
+    auction_service.settle_session(db, s1.id)
+
+    s2 = auction_service.create_session(
+        db, auction_year, name="2026 年度第二场集中竞价（申报中）", price_floor=50, price_ceiling=120,
+        created_by=users[0].id,
+    )
+    auction_service.place_bid(db, s2.id, companies[0].id, "sell", 80, 80000, created_by=elec_user.id)
+
     db.commit()
     db.close()
     print("初始化完成：2 家企业、4 个核算边界、3 个排放因子、4 条活动数据（2025）、2 份配额、2 份已批准 MRV 报告、2 条履约记录（含 1 次缺口补缴）")
+    print("竞价市场：2026 年度首场已撮合结算（统一成交价 82 元/t、成交 12 万吨），第二场申报中")
     print("账号：admin / verifier / elec / cement，密码均为 123456")
 
 

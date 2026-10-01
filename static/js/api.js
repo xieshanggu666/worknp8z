@@ -46,6 +46,12 @@ const StatusBadge = (s) => {
     draft: ["muted", "草稿"],
     submitted: ["info", "已提交"],
     approved: ["ok", "已批准"],
+    open: ["info", "申报中"],
+    matched: ["warn", "已撮合待结算"],
+    settled: ["ok", "已结算"],
+    filled: ["ok", "全部成交"],
+    partial: ["warn", "部分成交"],
+    unfilled: ["muted", "未成交"],
   };
   const [cls, label] = map[s] || ["muted", s];
   return `<span class="badge ${cls}">${label}</span>`;
@@ -67,6 +73,12 @@ const txLabel = {
   trade_release: "撤销释放占用",
   trade_deliver_out: "订单交割划出",
   trade_deliver_in: "订单交割受让",
+  trade_deficit_clear: "订单到账履约补缴",
+  auction_reserve: "竞价卖单占用",
+  auction_release: "竞价释放占用",
+  auction_deliver_out: "竞价结算划出",
+  auction_deliver_in: "竞价结算受让",
+  auction_deficit_clear: "竞价到账履约补缴",
 };
 
 const orderStatusMap = {

@@ -53,6 +53,26 @@ def trade_order_key(order_id: int) -> str:
     return f"order:{order_id}"
 
 
+def auction_session_key(session_id: int) -> str:
+    """集中竞价场次键：报价/撤单/撮合/结算/场次撤销的进程内串行化。
+
+    锁名按字典序满足全局锁序 ``account: < auction: < clear: < order:``，
+    与账户键、企业年度清缴键、企业间订单键组合获取时不会形成锁环。
+    """
+    return f"auction:{session_id}"
+
+
+def auction_write_key() -> str:
+    """竞价市场全局写键：所有场次写操作（报价/撤单/撮合/结算/撤销）都必须持有。
+
+    单场次操作涉及的企业账户集合随报价动态变化，若只按“场次键 + 部分企业键”
+    加锁，两个写操作的键集合不同（如撮合持有 A/B 企业键、撤单持有 A/C 企业键），
+    排序加锁无法保证二者完全互斥。引入单个全局写键后，任意场次写操作在进程内
+    完全串行，场次键/企业键继续负责与场外（企业间订单、手动清缴）的互斥。
+    """
+    return "auction:write"
+
+
 def _get_lock(key: str) -> threading.RLock:
     with _locks_guard:
         lock = _locks.get(key)

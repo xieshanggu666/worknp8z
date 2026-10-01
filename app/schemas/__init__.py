@@ -82,3 +82,32 @@ class TradeOrderCancelIn(BaseModel):
 
 class ReportReversalIn(BaseModel):
     reason: str = Field(min_length=2, max_length=500)
+
+
+# ---------------------------------------------------------------------------
+# 集中竞价市场
+# ---------------------------------------------------------------------------
+
+
+class AuctionSessionIn(BaseModel):
+    year: int
+    name: str = ""
+    price_floor: float = Field(default=0, ge=0)
+    price_ceiling: float = Field(default=0, ge=0)
+    bid_start_at: str | None = None  # ISO 8601，空表示立即开始
+    bid_end_at: str | None = None
+    remark: str = ""
+
+
+class AuctionBidIn(BaseModel):
+    company_id: int | None = None  # 企业用户忽略并强制为本企业；监管代客报价时必填
+    side: str = Field(pattern="^(buy|sell)$")
+    price: float = Field(ge=0)
+    quantity: float = Field(gt=0)
+    remark: str = ""
+    idempotency_key: str | None = None
+
+
+class AuctionCancelIn(BaseModel):
+    reason: str = Field(default="", max_length=256)
+
